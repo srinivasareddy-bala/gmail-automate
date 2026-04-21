@@ -2,17 +2,18 @@ import imaplib
 import email
 import os
 from dotenv import load_dotenv
-from docsumm_ai import summarize
+# from docsumm_ai import summarize
+from transformers import pipeline
 
 # --- Configuration ---
 load_dotenv()
 EMAIL = os.getenv("GMAIL_ACCOUNT")
 APP_PASSWORD = os.getenv("GMAIL_APP_PASSWORD")
-IMAP_SERVER = "imap.gmail.com"
+IMAP_SERVER = os.getenv("IMAP_SERVER")
 
 
 def get_body(msg):
-    """NEW: Extracts the plain text body from an email message object."""
+    """NEW: Extracts the plain text body from an mail message object."""
     if msg.is_multipart():
         # Emails are often like ZIP files; we 'walk' through the contents
         for part in msg.walk():
@@ -28,34 +29,91 @@ def get_body(msg):
 
     return "[No Plain Text Body Found]"
 
+# This downloads a small, specialized summarization model (first time only)
+summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+#installed torch to use above model in the pipeline
+
+def summarize_email(email_body):
+    # Max_length controls the summary size
+    summary = summarizer(email_body, max_length=50, min_length=20, do_sample=False)
+    return summary[0]['summary_text']
 
 def read_inbox():
-    # Connect to Gmail's IMAP server
-    mail = imaplib.IMAP4_SSL(IMAP_SERVER)
+    try:
+
+        # Connect to Gmail's IMAP server
+        mail = imaplib.IMAP4_SSL(IMAP_SERVER)
+        mail.login(EMAIL, APP_PASSWORD)
+    except Exception as e:
+        print(f"Runtime Exception: {e}")
+    
+    #mail.list() to see the list of folders in your mail server
+
+    # 1. Use the correct Gmail-specific folder name
+    # folder_name = '"[Gmail]/All mail"' 
+    folder_name = '"[Gmail]/All Mail"' 
+    # list = mail.list()
+    status, _ = mail.select(folder_name)
+    search_query, message_ids = 'category:Updates is:unread', []
+    if status == 'OK':
+        status, message_ids = mail.search(None, 'X-GM-RAW', f'"{search_query}"')
+        print(f"Successfully selected {message_ids}")
+    else:
+        print(f"""search a folder: {folder_name} that wasn't selected, 
+              or your search syntax: {search_query} was wrong""")
+        exit()
 
     try:
-        mail.login(EMAIL, APP_PASSWORD)
-        mail.select("inbox")  # Connect to the inbox
+        for id in message_ids[0].split():
+            id_string = ",".join([id.decode() if isinstance(id, bytes) else str(id) for id in message_ids])
+
+            print(f"Moving IDs {id_string} to Trash...")
+
+            # +X-GM-LABELS is a Gmail-specific extension to add a label
+            # '\\Trash' is the system path for the Bin
+            status, response = mail.store(id_string, '+FLAGS', '\\Deleted')
+
+            print(status, response)
+
+
+            # 1. Fetch and process
+            # status, data = mail.fetch(id, '(RFC822)')
+            # for response_part in data:
+            #     if isinstance(response_part, tuple):
+                    # msg = mail.message_from_bytes(response_part[1])
+                    # body = get_body(msg)
+                    # IMAP commands prefer a single string of IDs for batch processing
+                    
+                    # --- Your AI Logic Here ---
+                    # print(f"Summarizing promo from: {msg['from']}...")
+
+                    # 2. TRASH the mail
+                    # This tells Gmail: "Move this specific message to the Trash bin"
+                    # mail.store(num, '+X-GM-LABELS', '\\Trash')
+                    # print(f"ID {num.decode()} moved to Trash.")
 
         # Search for all unread emails
-        status, messages = mail.search(None, 'UNSEEN')
+        # status, messages = mail.search(None, 'UNSEEN')
 
-        # messages[0] contains a space-separated list of email IDs
-        for num in messages[0].split():
-            # Fetch the email body (RFC822) for the given ID
-            status, data = mail.fetch(num, '(RFC822)')
 
-            for response_part in data:
-                if isinstance(response_part, tuple):
-                    # Parse the raw bytes into a readable message object
-                    msg = email.message_from_bytes(response_part[1])
-                    subject = msg["subject"]
-                    sender = msg["from"]
-                    body = get_body(msg)
-                    summary = summarize(body)
-                    print(f"Subject: {subject}")
-                    print(f"summary: {summary}")
-                    print(f"From: {sender}\n" + "-" * 20)
+
+        # messages[0] contains a space-separated list of mail IDs
+        # for num in messages[0].split():
+            # Fetch the mail body (RFC822) for the given ID
+            # status, data = mail.fetch(num, '(RFC822)')
+
+            # for response_part in data:
+            #     if isinstance(response_part, tuple):
+            #         # Parse the raw bytes into a readable message object
+            #         msg = mail.message_from_bytes(response_part[1])
+            #         subject = msg["subject"]
+            #         sender = msg["from"]
+            #         body = get_body(msg)
+            #         # summary = summarize(body)
+            #         summary = summarize_email(body)
+            #         print(f"Subject: {subject}")
+            #         print(f"summary: {summary}")
+                    # print(f"From: {sender}\n" + "-" * 20)
 
     except Exception as e:
         print(f"Error: {e}")
