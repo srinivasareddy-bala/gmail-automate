@@ -50,13 +50,12 @@ def read_inbox():
     #mail.list() to see the list of folders in your mail server
 
     # 1. Use the correct Gmail-specific folder name
-    # folder_name = '"[Gmail]/All mail"' 
     folder_name = '"[Gmail]/All Mail"' 
-    # list = mail.list()
+    list = mail.list()
     status, _ = mail.select(folder_name)
     search_query, message_ids = 'category:Updates is:unread', []
     if status == 'OK':
-        status, message_ids = mail.search(None, 'X-GM-RAW', f'"{search_query}"')
+        status, message_ids = mail.search( None, 'X-GM-RAW', f'"{search_query}"')
         print(f"Successfully selected {message_ids}")
     else:
         print(f"""search a folder: {folder_name} that wasn't selected, 
@@ -64,36 +63,10 @@ def read_inbox():
         exit()
 
     try:
-        for id in message_ids[0].split():
-            id_string = ",".join([id.decode() if isinstance(id, bytes) else str(id) for id in message_ids])
+        id_string = ",".join([id.decode() if isinstance(id, bytes) else str(id) for id in message_ids[0].split()])
+        status, response = mail.store(id_string, '+X-GM-LABELS', '\\Trash')
 
-            print(f"Moving IDs {id_string} to Trash...")
-
-            # +X-GM-LABELS is a Gmail-specific extension to add a label
-            # '\\Trash' is the system path for the Bin
-            status, response = mail.store(id_string, '+FLAGS', '\\Deleted')
-
-            print(status, response)
-
-
-            # 1. Fetch and process
-            # status, data = mail.fetch(id, '(RFC822)')
-            # for response_part in data:
-            #     if isinstance(response_part, tuple):
-                    # msg = mail.message_from_bytes(response_part[1])
-                    # body = get_body(msg)
-                    # IMAP commands prefer a single string of IDs for batch processing
-                    
-                    # --- Your AI Logic Here ---
-                    # print(f"Summarizing promo from: {msg['from']}...")
-
-                    # 2. TRASH the mail
-                    # This tells Gmail: "Move this specific message to the Trash bin"
-                    # mail.store(num, '+X-GM-LABELS', '\\Trash')
-                    # print(f"ID {num.decode()} moved to Trash.")
-
-        # Search for all unread emails
-        # status, messages = mail.search(None, 'UNSEEN')
+        # print(status, response)
 
 
 
