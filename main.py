@@ -3,7 +3,13 @@ import email
 import os
 from dotenv import load_dotenv
 # from docsumm_ai import summarize
-from transformers import pipeline
+# from transformers import pipeline # not working
+
+from mlx_lm import load, generate
+
+# Load the model
+model, tokenizer = load("mlx-community/Llama-3.2-3B-Instruct-4bit")
+
 
 # --- Configuration ---
 load_dotenv()
@@ -30,13 +36,19 @@ def get_body(msg):
     return "[No Plain Text Body Found]"
 
 # This downloads a small, specialized summarization model (first time only)
-summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
-#installed torch to use above model in the pipeline
+# summarizer = pipeline("summarization", model="facebook/bart-large-cnn")
+#install torch to use above model in the pipeline
+
+
 
 def summarize_email(email_body):
     # Max_length controls the summary size
-    summary = summarizer(email_body, max_length=50, min_length=20, do_sample=False)
-    return summary[0]['summary_text']
+    # summary = summarizer(email_body, max_length=100, min_length=20, do_sample=False)
+
+    prompt = f"Summarize this email into 2-5 sentences:\n\n{email_body}"
+    summary = generate(model, tokenizer, prompt=prompt, max_tokens=500)
+
+    return summary
 
 def read_inbox():
     try:
@@ -53,7 +65,7 @@ def read_inbox():
     folder_name = '"[Gmail]/All Mail"' 
     list = mail.list()
     status, _ = mail.select(folder_name)
-    search_query, message_ids = 'category:Updates is:unread', []
+    search_query, message_ids = 'is:unread', []
     if status == 'OK':
         status, message_ids = mail.search( None, 'X-GM-RAW', f'"{search_query}"')
         print(f"Successfully selected {message_ids}")
@@ -63,30 +75,31 @@ def read_inbox():
         exit()
 
     try:
-        id_string = ",".join([id.decode() if isinstance(id, bytes) else str(id) for id in message_ids[0].split()])
-        status, response = mail.store(id_string, '+X-GM-LABELS', '\\Trash')
+        # id_string = ",".join([id.decode() if isinstance(id, bytes) else str(id) for id in message_ids[0].split()])
+        # status, response = mail.store(id_string, '+X-GM-LABELS', '\\Trash')
 
         # print(status, response)
 
 
 
         # messages[0] contains a space-separated list of mail IDs
-        # for num in messages[0].split():
+        for num in message_ids[0].split():
             # Fetch the mail body (RFC822) for the given ID
-            # status, data = mail.fetch(num, '(RFC822)')
-
-            # for response_part in data:
-            #     if isinstance(response_part, tuple):
-            #         # Parse the raw bytes into a readable message object
-            #         msg = mail.message_from_bytes(response_part[1])
-            #         subject = msg["subject"]
-            #         sender = msg["from"]
-            #         body = get_body(msg)
-            #         # summary = summarize(body)
-            #         summary = summarize_email(body)
-            #         print(f"Subject: {subject}")
-            #         print(f"summary: {summary}")
-                    # print(f"From: {sender}\n" + "-" * 20)
+            status, data = mail.fetch(num, '(RFC822)')
+            print(data, len(data), sep = '\n')
+            for response_part in data:
+                if isinstance(response_part, tuple):
+                    # Parse the raw bytes into a readable message object
+                    msg = email.message_from_bytes(response_part[1])
+                    subject = msg["subject"]
+                    sender = msg["from"]
+                    body = get_body(msg)
+                    print(f"From: {sender}\n" + "-" * 20)
+                    print(f"Subject: {subject}")
+                    print(f"Body:\n {body}")
+                    summary = summarize_email(body)
+                    print(f"Summary:\n {summary}")
+                    
 
     except Exception as e:
         print(f"Error: {e}")
